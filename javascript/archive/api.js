@@ -8,7 +8,7 @@ var time = function time() {
 
 var InitialData = {
     _planets: {},
-    score: '0',
+    score: 0,
     level: 1,
     bosses_fought: 0,
     planets_visited: 0,
@@ -384,7 +384,7 @@ CSaliensAPI.prototype.ReportScore = function(ajax) {
         return;
     }
 
-    var score = ajax._param("score");
+    var score = parseInt(ajax._param("score"));
 
     this.GetPlanet(
         (
@@ -411,7 +411,7 @@ CSaliensAPI.prototype.ReportScore = function(ajax) {
                     return;
                 }
 
-                if (!parseInt(score)) {
+                if (!score) {
                     ajax._fail();
                     return;
                 }
