@@ -50,7 +50,7 @@ function CSaliensScoreData(save) {
     if (!this.bSave)
         this.data = InitialData;
     else {
-        for (let key in InitialData)
+        for (var key in InitialData)
             if (this.get(key) === undefined)
                 this.set(key, InitialData[key]);
     }
@@ -119,7 +119,7 @@ CSaliensAPIAjaxState.prototype._timeout = function timeout() {
     if (!endpoints) {
         return this._error("unknown host: " + url.host);
     }
-    let endpoint = endpoints[url.pathname];
+    var endpoint = endpoints[url.pathname];
     if (!endpoint) {
         return this._error("unknown endpoint: " + url.pathname);
     }
@@ -138,7 +138,8 @@ function CSaliensAPI() {
             "/ITerritoryControlMinigameService/GetPlayerInfo/v0001/": this.GetPlayerInfo.bind(this),
             "/ITerritoryControlMinigameService/GetPlanets/v0001/": this.GetPlanets.bind(this),
             "/ITerritoryControlMinigameService/JoinPlanet/v0001/": this.JoinPlanet.bind(this),
-            "/ITerritoryControlMinigameService/GetPlanet/v0001/": this.GetPlanet.bind(this)
+            "/ITerritoryControlMinigameService/GetPlanet/v0001/": this.GetPlanet.bind(this),
+            "/ITerritoryControlMinigameService/JoinZone/v0001/": this.JoinZone.bind(this)
         }
     }
 }
@@ -162,6 +163,14 @@ CSaliensAPI.prototype.GetPlayerInfo = function GetPlayerInfo(data) {
     info.bosses_fought = gScorer.get("bosses_fought");
     info.planets_visited = gScorer.get("planets_visited");
     info.cheated = gScorer.get("cheated");
+    info.active_zone_game = gScorer.get("active_zone_game");
+    info.active_boss_game = gScorer.get("active_boss_game");
+    info.active_zone_position = gScorer.get("active_zone_position");
+    info.active_planet = gScorer.get("active_planet");
+
+    if (info.active_zone_game || info.active_boss_game) {
+        info.time_in_zone = time() - gScorer.get("zone_join_time");
+    }
 
     info.next_level_score = ScoreTable[info.level];
     data._success({
@@ -224,7 +233,7 @@ CSaliensAPI.prototype.GetPlanets = function GetPlanets(ajax) {
     }
     else {
         $J.real_ajax({
-            url: "./api-responses/getplanets_" + (ajax._param("language") || "english") + ".json"
+            url: "./api-responses/getplanets_" + (ajax._param("language") || gLanguage) + ".json"
         }).success(function(planets) {
             this.m_GetPlanets = planets;
             this.m_GetPlanets.sort(function sort(a, b) {
@@ -239,6 +248,10 @@ CSaliensAPI.prototype.GetPlanets = function GetPlanets(ajax) {
 }
 
 CSaliensAPI.prototype.JoinPlanet = function JoinPlanet(data) {
+    if (gScorer.get("active_planet")) {
+        data._fail();
+        return;
+    }
     this.GetPlanets(
         (
             new CSaliensAPIAjaxState(null, {
@@ -256,18 +269,15 @@ CSaliensAPI.prototype.JoinPlanet = function JoinPlanet(data) {
                         allowed = true;
                 })
                 if (allowed) {
+                    gScorer.set("active_planet", data._param("id"));
                     data._success();
                 }
                 else {
                     data._fail();
                 }
-            }
+            }.bind(this)
         )
     );
-}
-
-CSaliensAPI.prototype.GetPlanetData = function GetPlanetData(id) {
-    let planet = this.GetPlanetsData(this.m_Planets[id]);
 }
 
 CSaliensAPI.prototype.GetPlanet = function GetPlanet(ajax) {
@@ -320,6 +330,43 @@ CSaliensAPI.prototype.GetPlanet = function GetPlanet(ajax) {
     );
 }
 
+CSaliensAPI.prototype.JoinZone = function JoinZone(ajax) {
+    if (!gScorer.get("active_planet")) {
+        ajax._fail();
+        return;
+    }
+    var position = ajax._param("zone_position");
+
+    this.GetPlanet(
+        (
+            new CSaliensAPIAjaxState(null, {
+                data: {
+                    id: gScorer.get("active_planet"),
+                }
+            })
+        ).success(
+            function success(res) {
+
+                var planet = res.response.planets[0];
+
+                var allowed = false;
+
+                planet.zones.forEach(function(zone) {
+                    if (zone.zone_position == position && !zone.captured) {
+                        allowed = zone
+                    }
+                }.bind(this));
+
+                if (!allowed) {
+                    ajax._fail();
+                    return;
+                }
+
+                ajax._success();
+            }.bind(this)
+        )
+    );
+}
 
 CSaliensAPI.prototype.ajax = function ajax(data) {
     return new CSaliensAPIAjaxState(this, data);

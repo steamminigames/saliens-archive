@@ -50,6 +50,13 @@ getplanets.forEach(p => {
         urls.push(map_img);
     }
 
+    let bg_img = `https://steamcdn-a.akamaihd.net/steamcommunity/public/assets/saliengame/backgrounds/${p.state.land_filename}`;
+
+    if (urls.indexOf(bg_img) === -1) {
+        getwrite(bg_img, `../assets/saliengame/backgrounds/${p.state.land_filename}`);
+        urls.push(bg_img);
+    }
+
     planets[p.id].zones.forEach(zone => {
         zone.top_clans.forEach(clan => {
             let path = `images/avatars/${clan.avatar.substr(0, 2)}/${clan.avatar}.jpg`;
