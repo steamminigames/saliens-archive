@@ -45,32 +45,38 @@ var ScoreTable = [
     26400000, // Level 25
 ];
 
+var DifficultyScores = [
+    0, // none
+    600, // easy
+    1200, // medium
+    2400 // high
+]
+
 function CSaliensScoreData(save) {
     this.bSave = save;
     if (!this.bSave)
         this.data = InitialData;
     else {
-        for (var key in InitialData)
-            if (this.get(key) === undefined)
+        this.data = WebStorage.GetLocal("api-data");
+        if (!this.data) {
+            WebStorage.SetLocal("api-data", {});
+            this.data = WebStorage.GetLocal("api-data");
+            for (var key in InitialData)
                 this.set(key, InitialData[key]);
+        }
     }
 }
 
 CSaliensScoreData.prototype.get = function get(key) {
-    if (this.bSave)
-        return WebStorage.GetLocal(key);
-    else
-        return this.data[key];
+    return this.data[key];
 }
 
 CSaliensScoreData.prototype.set = function get(key, value) {
-    if (this.bSave)
-        WebStorage.SetLocal(key, value);
-    else
-        this.data[key] = value;
+    this.data[key] = value;
+    if (this.bSave) {
+        WebStorage.SetLocal("api-data", this.data);
+    }
 }
-
-gScorer = new CSaliensScoreData(false);
 
 function CSaliensAPIAjaxState(api, data) {
     this._data = data;
@@ -139,7 +145,8 @@ function CSaliensAPI() {
             "/ITerritoryControlMinigameService/GetPlanets/v0001/": this.GetPlanets.bind(this),
             "/ITerritoryControlMinigameService/JoinPlanet/v0001/": this.JoinPlanet.bind(this),
             "/ITerritoryControlMinigameService/GetPlanet/v0001/": this.GetPlanet.bind(this),
-            "/ITerritoryControlMinigameService/JoinZone/v0001/": this.JoinZone.bind(this)
+            "/ITerritoryControlMinigameService/JoinZone/v0001/": this.JoinZone.bind(this),
+            "/ITerritoryControlMinigameService/ReportScore/v0001/": this.ReportScore.bind(this)
         }
     }
 }
@@ -331,10 +338,11 @@ CSaliensAPI.prototype.GetPlanet = function GetPlanet(ajax) {
 }
 
 CSaliensAPI.prototype.JoinZone = function JoinZone(ajax) {
-    if (!gScorer.get("active_planet")) {
+    if (!gScorer.get("active_planet") || gScorer.get("active_zone_game") || gScorer.get("active_boss_game")) {
         ajax._fail();
         return;
     }
+
     var position = ajax._param("zone_position");
 
     this.GetPlanet(
@@ -362,16 +370,91 @@ CSaliensAPI.prototype.JoinZone = function JoinZone(ajax) {
                     return;
                 }
 
+                gScorer.set("active_zone_game", allowed.gameid);
+                gScorer.set("active_zone_position", allowed.zone_position);
                 ajax._success();
             }.bind(this)
         )
     );
 }
 
+CSaliensAPI.prototype.ReportScore = function(ajax) {
+    if (!gScorer.get("active_planet") || !gScorer.get("active_zone_game") || gScorer.get("active_boss_game")) {
+        ajax._fail();
+        return;
+    }
+
+    var score = ajax._param("score");
+
+    this.GetPlanet(
+        (
+            new CSaliensAPIAjaxState(null, {
+                data: {
+                    id: gScorer.get("active_planet"),
+                }
+            })
+        ).success(
+            function success(res) {
+
+                var planet = res.response.planets[0];
+
+                var allowed = false;
+
+                planet.zones.forEach(function(zone) {
+                    if (zone.gameid == gScorer.get("active_zone_game") && !zone.captured) {
+                        allowed = zone
+                    }
+                }.bind(this));
+
+                if (!allowed) {
+                    ajax._fail();
+                    return;
+                }
+
+                if (!parseInt(score)) {
+                    ajax._fail();
+                    return;
+                }
+
+                if (score > DifficultyScores[allowed.difficulty])
+                    score = DifficultyScores[allowed.difficulty];
+                else if (score < 0)
+                    score = 0;
+
+                var ret = {
+                    old_level: gScorer.get("level"),
+                    old_score: gScorer.get("score")
+                }
+                ret.new_score = ret.old_score + score;
+                gScorer.set("score", ret.new_score);
+
+                ret.new_level = ret.old_level;
+
+                for (var i = ret.old_level; i < ScoreTable.length; i++) {
+                    if (ScoreTable[i] > ret.new_score)
+                        break;
+                    ret.new_level = i + 1;
+                }
+
+                gScorer.set("score", ret.new_score);
+                gScorer.set("level", ret.new_level);
+                gScorer.set("active_zone_game", undefined);
+                gScorer.set("active_zone_position", undefined);
+                ajax._success({
+                    response: ret
+                });
+            }.bind(this)
+        )
+    );
+    var score = ajax._param("score");
+}
+
 CSaliensAPI.prototype.ajax = function ajax(data) {
     return new CSaliensAPIAjaxState(this, data);
 }
 
+
+gScorer = new CSaliensScoreData(true);
 gAPI = new CSaliensAPI();
 $J.real_ajax = $J.ajax;
 $J.ajax = gAPI.ajax.bind(gAPI);
