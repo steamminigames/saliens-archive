@@ -283,7 +283,19 @@ CSaliensAPI.prototype.GetPlanet = function GetPlanet(ajax) {
             function _success(res) {
                 var done = function done(planet) {
                     var res = this.GetPlanetsData(planet);
-                    res.zones = planet.zones;
+                    res.zones = []
+                    planet.zones.forEach(function(zone){
+                        res.zones.push({
+                            "zone_position": zone.zone_position,
+                            "leader": zone.leader,
+                            "type": zone.type,
+                            "gameid": zone.gameid,
+                            "difficulty": zone.difficulty,
+                            "captured": false,
+                            "capture_progress": 0,
+                            "top_clans": zone.top_clans
+                        });
+                    }.bind(this));
                     ajax._success({
                         response: {
                             game_version: 2,
