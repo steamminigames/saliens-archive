@@ -146,7 +146,8 @@ function CSaliensAPI() {
             "/ITerritoryControlMinigameService/JoinPlanet/v0001/": this.JoinPlanet.bind(this),
             "/ITerritoryControlMinigameService/GetPlanet/v0001/": this.GetPlanet.bind(this),
             "/ITerritoryControlMinigameService/JoinZone/v0001/": this.JoinZone.bind(this),
-            "/ITerritoryControlMinigameService/ReportScore/v0001/": this.ReportScore.bind(this)
+            "/ITerritoryControlMinigameService/ReportScore/v0001/": this.ReportScore.bind(this),
+            "/IMiniGameService/LeaveGame/v0001/": this.LeaveGame.bind(this)
         }
     }
 }
@@ -338,10 +339,13 @@ CSaliensAPI.prototype.GetPlanet = function GetPlanet(ajax) {
 }
 
 CSaliensAPI.prototype.JoinZone = function JoinZone(ajax) {
-    if (!gScorer.get("active_planet") || gScorer.get("active_zone_game") || gScorer.get("active_boss_game")) {
-        ajax._fail();
-        return;
-    }
+    if (!gScorer.get("active_planet") || gScorer.get("active_zone_game") || gScorer.get("active_boss_game"))
+        return ajax._fail();
+
+    var time_in_zone = time() - gScorer.get("zone_join_time");
+
+    if (time_in_zone < 110 || time_in_zone > 150)
+        return ajax._fail();
 
     var position = ajax._param("zone_position");
 
@@ -426,7 +430,6 @@ CSaliensAPI.prototype.ReportScore = function(ajax) {
                     old_score: gScorer.get("score")
                 }
                 ret.new_score = ret.old_score + score;
-                gScorer.set("score", ret.new_score);
 
                 ret.new_level = ret.old_level;
 
@@ -440,6 +443,7 @@ CSaliensAPI.prototype.ReportScore = function(ajax) {
                 gScorer.set("level", ret.new_level);
                 gScorer.set("active_zone_game", undefined);
                 gScorer.set("active_zone_position", undefined);
+                gScorer.set("zone_join_time", undefined);
                 ajax._success({
                     response: ret
                 });
@@ -447,6 +451,35 @@ CSaliensAPI.prototype.ReportScore = function(ajax) {
         )
     );
     var score = ajax._param("score");
+}
+
+CSaliensAPI.prototype.LeaveGame = function LeaveGame(ajax) {
+    if (gScorer.get("active_zone_game") !== undefined) {
+        if (gScorer.get("active_zone_game") == ajax._param("gameid")) {
+            gScorer.set("active_zone_game", undefined);
+            gScorer.set("zone_join_time", undefined);
+            gScorer.set("active_zone_position", undefined);
+        }
+        else {
+            ajax._fail({});
+        }
+    }
+    else if (gScorer.get("active_boss_game") !== undefined) {
+        if (gScorer.get("active_boss_game") == ajax._param("gameid")) {
+            gScorer.set("active_boss_game", undefined);
+            gScorer.set("zone_join_time", undefined);
+            gScorer.set("active_zone_position", undefined);
+        }
+        else {
+            ajax._fail({});
+        }
+    }
+    else if (gScorer.get("active_planet") !== undefined && ajax._param("gameid") == gScorer.get("active_planet")) {
+        gScorer.set("active_planet", undefined);
+    }
+    else {
+        ajax._fail({});
+    }
 }
 
 CSaliensAPI.prototype.ajax = function ajax(data) {
